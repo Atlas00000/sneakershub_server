@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import { Router, type Router as RouterType } from 'express';
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { logger } from '../utils/logger.js';
 
-const router = Router();
+const router: RouterType = Router();
 
 const R2_ACCESS_KEY_ID = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY;
@@ -110,8 +111,12 @@ function parseMaterialFiles(files: string[]): Array<{
  * Debug endpoint to list all files in R2 (for troubleshooting)
  */
 router.get('/debug', async (req, res) => {
+  const routeLogger = logger.scope('MaterialsAPI');
+  routeLogger.debug('Debug endpoint accessed');
+  
   try {
     if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+      routeLogger.warn('R2 credentials not configured');
       return res.status(500).json({ 
         error: 'R2 credentials not configured',
         hasAccessKey: !!R2_ACCESS_KEY_ID,
@@ -136,7 +141,7 @@ router.get('/debug', async (req, res) => {
       prefix: 'threejs-assets/textures/',
     });
   } catch (error) {
-    console.error('Debug error:', error);
+    logger.error('Debug error listing R2 files', error);
     res.status(500).json({ 
       error: 'Failed to list files',
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -150,8 +155,12 @@ router.get('/debug', async (req, res) => {
  * Lists all materials from R2 and generates material definitions
  */
 router.get('/list', async (req, res) => {
+  const routeLogger = logger.scope('MaterialsAPI');
+  routeLogger.debug('Listing materials from R2');
+  
   try {
     if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+      routeLogger.warn('R2 credentials not configured');
       return res.status(500).json({ 
         error: 'R2 credentials not configured' 
       });
@@ -198,6 +207,7 @@ router.get('/list', async (req, res) => {
 
     // Parse files into material definitions
     const materials = parseMaterialFiles(uniqueFiles);
+    routeLogger.info(`Found ${materials.length} materials from ${uniqueFiles.length} files`);
 
     res.json({
       success: true,
@@ -207,7 +217,7 @@ router.get('/list', async (req, res) => {
       sampleFiles: uniqueFiles.slice(0, 10), // Show first 10 for debugging
     });
   } catch (error) {
-    console.error('Error listing materials:', error);
+    logger.error('Error listing materials from R2', error);
     res.status(500).json({ 
       error: 'Failed to list materials',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -220,8 +230,12 @@ router.get('/list', async (req, res) => {
  * Generates materials.json format from R2 files
  */
 router.get('/generate', async (req, res) => {
+  const routeLogger = logger.scope('MaterialsAPI');
+  routeLogger.debug('Generating materials from R2');
+  
   try {
     if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+      routeLogger.warn('R2 credentials not configured');
       return res.status(500).json({ 
         error: 'R2 credentials not configured' 
       });
@@ -288,6 +302,7 @@ router.get('/generate', async (req, res) => {
       priceModifier: material.category === 'premium' ? 50 : 0,
       premium: material.category === 'premium',
     }));
+    routeLogger.info(`Generated ${materialDefinitions.length} material definitions`);
 
     res.json({
       success: true,
@@ -295,7 +310,7 @@ router.get('/generate', async (req, res) => {
       count: materialDefinitions.length,
     });
   } catch (error) {
-    console.error('Error generating materials:', error);
+    logger.error('Error generating materials from R2', error);
     res.status(500).json({ 
       error: 'Failed to generate materials',
       message: error instanceof Error ? error.message : 'Unknown error'
